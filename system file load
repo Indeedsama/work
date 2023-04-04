@@ -1,0 +1,60 @@
+import os
+import time
+import win32api
+import win32con
+import pythoncom
+import pyWinhook
+
+# Path to the log file where the program will store data
+log_file = "log.txt"
+
+# Variables to keep track of when the laptop was last opened and closed
+last_opened = None
+last_closed = None
+def write_to_log(log_entry):
+    with open(log_file, "a") as f:
+        f.write(log_entry + "\n")
+def on_keyboard_event(event):
+    global last_opened, last_closed
+
+    # Check if the user pressed the Enter or Esc key
+    if event.Key == "Return":
+        last_opened = time.time()
+        write_to_log(f"Laptop opened at {time.ctime(last_opened)}")
+    elif event.Key == "Escape":
+        last_closed = time.time()
+        write_to_log(f"Laptop closed at {time.ctime(last_closed)}")
+
+        # Calculate the duration of the session and log it
+        duration = last_closed - last_opened
+        write_to_log(f"Session duration: {duration:.2f} seconds")
+
+        # Use the 'os' module to get a list of recently modified files
+        # and log their names
+        recent_files = []
+        for entry in os.scandir():
+            if entry.stat().st_mtime > last_opened:
+                recent_files.append(entry.name)
+        write_to_log("Files used during session:")
+        write_to_log("\n".join(recent_files))
+
+        # Use the 'win32api' and 'win32con' modules to get a list of open
+        # windows and log their titles
+        window_list = []
+        win32api.EnumWindows(lambda hwnd, window_list: window_list.append(hwnd), window_list)
+        write_to_log("Programs used during session:")
+        for hwnd in window_list:
+            if win32api.IsWindowVisible(hwnd):
+                title = win32api.GetWindowText(hwnd)
+                if title != "":
+                    write_to_log(title)
+
+    # Return True to pass the event to other handlers
+    return True
+# Create a hook manager and register the keyboard event handler
+hook_manager = pyWinhook.HookManager()
+hook_manager.KeyDown = on_keyboard_event
+hook_manager.HookKeyboard()
+
+# Start the event loop
+pythoncom.PumpMessages()
